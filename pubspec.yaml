@@ -1,0 +1,32 @@
+name: trazza
+description: Aplicación de finanzas personales.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '^3.13.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Gestión de Estado y Arquitectura
+  flutter_riverpod: ^2.5.1
+  
+  # Navegación Declarativa
+  go_router: ^14.0.0
+  
+  # Backend (Base de Datos, Auth, Storage)
+  supabase_flutter: ^2.5.0
+  
+  # UI, Diseño y Tipografía
+  google_fonts: ^6.2.1
+  fl_chart: ^0.68.0
+  lucide_icons: 0.257.0
+  
+  # Utilidades (OCR, Formatos, Fotos)
+  intl: ^0.19.0
+  image_picker: ^1.1.2
+
+flutter:
+  uses-material-design: true
