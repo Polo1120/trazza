@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:trazza/core/theme/app_theme.dart';
+import 'package:trazza/features/auth/application/providers/auth_provider.dart';
+import 'package:trazza/features/expenses/domain/models/expense_model.dart';
+import 'package:trazza/features/expenses/providers/expense_provider.dart';
 import 'package:trazza/features/expenses/presentation/widgets/category_chips_row.dart';
-import 'package:trazza/features/expenses/presentation/widgets/merchant_selector_row.dart';
 import 'package:trazza/features/expenses/presentation/widgets/numeric_keypad.dart';
 import 'package:trazza/features/expenses/presentation/screens/scan_receipt_screen.dart';
+import 'package:trazza/features/profile/domain/models/category_model.dart';
+import 'package:trazza/features/profile/providers/category_provider.dart';
 
 class ExpenseData {
   final int amount;
-  final CategoryItem category;
+  final CategoryModel category;
   final String? merchant;
   final String account;
   final DateTime date;
@@ -60,26 +65,27 @@ class AddExpenseSheet extends ConsumerStatefulWidget {
 
 class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   static const List<String> _accounts = [
-    'Bancolombia •• 4912',
-    'Nequi (Disponible)',
+    'Transferencia',
+    'Nequi',
     'Efectivo en Billetera',
   ];
 
-  String _rawAmount = '15000';
-  CategoryItem? _selectedCategory;
-  String? _selectedMerchant = 'Juan Valdez';
+  String _rawAmount = '0';
+  CategoryModel? _selectedCategory;
+  String? selectedCategoryId;
+  final TextEditingController descriptionController = TextEditingController();
   int _selectedAccountIndex = 0;
-  bool _isSubmitting = false;
+  bool isSaving = false;
 
   @override
-  void initState() {
-    super.initState();
-    _selectedCategory = CategoryChipsRow.defaultCategories.first;
+  void dispose() {
+    descriptionController.dispose();
+    super.dispose();
   }
 
   int get _numericAmount => int.tryParse(_rawAmount) ?? 0;
 
-  bool get _isFormValid => _numericAmount > 0 && _selectedCategory != null;
+  bool get _isFormValid => _numericAmount > 0 && selectedCategoryId != null;
 
   String _formatCurrency(int value) {
     return NumberFormat.decimalPattern('es_CO').format(value);
@@ -111,60 +117,83 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     });
   }
 
-  void _handleCategorySelect(CategoryItem category) {
+  void _handleCategorySelect(CategoryModel category) {
     setState(() {
       _selectedCategory = category;
-      if (_rawAmount == '0' || _rawAmount.isEmpty) {
-        _rawAmount = category.presetAmount.toString();
-      }
+      selectedCategoryId = category.id;
     });
   }
 
-  void _handleMerchantSelect(String merchant) {
+  void _handleAccountSelected(int index) {
     setState(() {
-      _selectedMerchant = _selectedMerchant == merchant ? null : merchant;
-    });
-  }
-
-  void _toggleAccount() {
-    setState(() {
-      _selectedAccountIndex = (_selectedAccountIndex + 1) % _accounts.length;
+      _selectedAccountIndex = index;
     });
   }
 
   Future<void> _submitExpense() async {
-    if (!_isFormValid || _isSubmitting) return;
+    if (!_isFormValid || isSaving) return;
+
+    final currentUser = ref.read(currentUserProvider);
+    if (currentUser == null) {
+      _showErrorSnackBar('Inicia sesión para guardar un gasto.');
+      return;
+    }
+
+    final amount = double.tryParse(_rawAmount);
+    if (amount == null || amount <= 0) {
+      _showErrorSnackBar('Ingresa un monto válido.');
+      return;
+    }
 
     final data = ExpenseData(
       amount: _numericAmount,
       category: _selectedCategory!,
-      merchant: _selectedMerchant,
+      merchant: descriptionController.text.trim(),
       account: _accounts[_selectedAccountIndex],
       date: DateTime.now(),
     );
+    final expenseModel = ExpenseModel(
+      userId: currentUser.id,
+      categoryId: selectedCategoryId,
+      amount: amount,
+      expenseDate: data.date,
+      description: descriptionController.text.trim(),
+    );
 
-    setState(() {
-      _isSubmitting = true;
-    });
+    setState(() => isSaving = true);
 
     try {
+      await ref.read(expenseRepositoryProvider).addExpense(expenseModel);
+      ref.invalidate(expensesProvider);
       if (widget.onSaveExpense != null) {
         await widget.onSaveExpense!(data);
       }
       if (mounted) {
-        Navigator.of(context).pop(data);
+        context.pop();
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+        _showErrorSnackBar('No se pudo guardar el gasto: $error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isSaving = false);
       }
     }
   }
 
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.errorColor,
+        content: Text(message),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final categoriesAsync = ref.watch(categoriesProvider);
     final remainingBudget = (widget.baseBudget - _numericAmount).clamp(
       0,
       widget.baseBudget,
@@ -311,9 +340,31 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                 ),
               ),
               const SizedBox(height: 14),
-              CategoryChipsRow(
-                selectedCategory: _selectedCategory,
-                onCategorySelected: _handleCategorySelect,
+              categoriesAsync.when(
+                loading: () => const SizedBox(
+                  height: 48,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, stackTrace) => Text(
+                  'No se pudieron cargar las categorías.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppTheme.errorColor,
+                  ),
+                ),
+                data: (categories) => categories.isEmpty
+                    ? Text(
+                        'Aún no tienes categorías disponibles.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppTheme.onSurfaceVariant,
+                        ),
+                      )
+                    : CategoryChipsRow(
+                        categories: categories,
+                        selectedCategoryId: selectedCategoryId,
+                        onCategorySelected: _handleCategorySelect,
+                      ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -323,9 +374,24 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                     child: Material(
                       color: AppTheme.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        onTap: _toggleAccount,
-                        borderRadius: BorderRadius.circular(12),
+                      child: PopupMenuButton<int>(
+                        onSelected: _handleAccountSelected,
+                        itemBuilder: (context) => [
+                          for (int index = 0; index < _accounts.length; index++)
+                            PopupMenuItem<int>(
+                              value: index,
+                              child: Row(
+                                children: [
+                                  Expanded(child: Text(_accounts[index])),
+                                  if (index == _selectedAccountIndex)
+                                    const Icon(
+                                      Icons.check_rounded,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -352,7 +418,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Cuenta Débito',
+                                      'Método de pago',
                                       style: GoogleFonts.inter(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w400,
@@ -435,16 +501,27 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                 onBackspacePressed: _handleBackspacePress,
               ),
               const SizedBox(height: 12),
-              MerchantSelectorRow(
-                selectedMerchant: _selectedMerchant,
-                onMerchantSelected: _handleMerchantSelect,
+              TextField(
+                controller: descriptionController,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  labelText: 'Comercio / Descripción',
+                  hintText: '¿En qué gastaste?',
+                  prefixIcon: const Icon(Icons.storefront_outlined),
+                  filled: true,
+                  fillColor: AppTheme.surfaceContainerLow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _isFormValid && !_isSubmitting
+                  onPressed: _isFormValid && !isSaving
                       ? _submitExpense
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -459,7 +536,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: _isSubmitting
+                  child: isSaving
                       ? const SizedBox(
                           width: 22,
                           height: 22,

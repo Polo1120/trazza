@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:trazza/core/theme/app_theme.dart';
 
 class DashboardHeader extends StatelessWidget {
-  final String userName;
+  final String? userName;
   final String screenTitle;
   final String? avatarUrl;
   final VoidCallback? onNotificationPressed;
@@ -11,7 +11,7 @@ class DashboardHeader extends StatelessWidget {
 
   const DashboardHeader({
     super.key,
-    this.userName = 'Camila',
+    this.userName,
     this.screenTitle = 'Dashboard',
     this.avatarUrl,
     this.onNotificationPressed,
@@ -49,7 +49,7 @@ class DashboardHeader extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Hola, $userName',
+                      userName == null ? 'Hola' : 'Hola, $userName',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,

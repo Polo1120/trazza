@@ -17,6 +17,14 @@ class AppTheme {
   static const Color onSecondaryContainer = Color(0xFF00714D);
   static const Color secondaryFixed = Color(0xFF6FFBBE);
   static const Color secondaryFixedDim = Color(0xFF4EDEA3);
+  static const Color onSecondaryFixed = Color(0xFF002113);
+
+  static const Color tertiaryFixed = Color(0xFFFFDAD7);
+  static const Color tertiaryFixedDim = Color(0xFFFFB3AD);
+
+  static const Color inverseSurface = Color(0xFF293040);
+  static const Color inverseOnSurface = Color(0xFFEDF0FF);
+  static const Color inversePrimary = Color(0xFF8BD6B6);
 
   static const Color tertiaryColor = Color(0xFF7F000F);
   static const Color tertiaryContainer = Color(0xFFA9081A);
