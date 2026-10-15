@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:trazza/core/theme/app_theme.dart';
 import 'package:trazza/features/expenses/presentation/widgets/add_expense_sheet.dart';
 
-class AddExpenseScreen extends ConsumerWidget {
+class AddExpenseScreen extends StatelessWidget {
   final Future<void> Function(ExpenseData data)? onSaveExpense;
   final VoidCallback? onScanReceiptPressed;
 
@@ -14,13 +12,20 @@ class AddExpenseScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          Container(
-            color: Colors.black.withValues(alpha: 0.35),
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () {
+                if (!context.mounted) return;
+                Navigator.of(context).pop();
+              },
+              child: Container(color: Colors.black.withValues(alpha: 0.35)),
+            ),
           ),
           Align(
             alignment: Alignment.bottomCenter,

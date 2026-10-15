@@ -36,7 +36,10 @@ class ExpenseTransactionCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(child: _ItemInfo(item: item)),
               const SizedBox(width: 8),
-              _AmountDisplay(amountCents: item.amountCents),
+              _AmountDisplay(
+                amountCents: item.amountCents,
+                isIncome: item.isIncome,
+              ),
             ],
           ),
         ),
@@ -117,8 +120,10 @@ class _ItemInfo extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            _dot(),
-            _PaymentBadge(label: item.paymentMethod),
+            if (item.paymentMethod.isNotEmpty) ...[
+              _dot(),
+              _PaymentBadge(label: item.paymentMethod),
+            ],
             if (item.hasOcrReceipt) ...[
               const SizedBox(width: 6),
               _OcrBadge(),
@@ -150,19 +155,29 @@ class _PaymentBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final paymentMethodIcon = switch (label.toLowerCase()) {
+      'efectivo' || 'efectivo en billetera' || 'cash' => Icons.payments_outlined,
+      'nequi' => Icons.account_balance_wallet_outlined,
+      'tarjeta' || 'tarjeta débito' || 'tarjeta credito' || 'tarjeta crédito' => Icons.credit_card_outlined,
+      'transferencia' || 'bancolombia' => Icons.account_balance_outlined,
+      _ => Icons.account_balance_wallet_outlined,
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: AppTheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
-        label,
-        style: GoogleFonts.inter(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          color: AppTheme.onSurfaceColor,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(paymentMethodIcon, size: 12, color: AppTheme.onSurfaceVariant),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.onSurfaceColor),
+          ),
+        ],
       ),
     );
   }
@@ -195,8 +210,9 @@ class _OcrBadge extends StatelessWidget {
 
 class _AmountDisplay extends StatelessWidget {
   final int amountCents;
+  final bool isIncome;
 
-  const _AmountDisplay({required this.amountCents});
+  const _AmountDisplay({required this.amountCents, required this.isIncome});
 
   String get formattedAmount {
     final value = (amountCents / 100).abs().round();
@@ -204,7 +220,7 @@ class _AmountDisplay extends StatelessWidget {
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
       (m) => '${m[1]}.',
     );
-    return '- \$$formatted';
+    return '${isIncome ? '+' : '-'} \$$formatted';
   }
 
   @override
@@ -217,7 +233,7 @@ class _AmountDisplay extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: AppTheme.onSurfaceColor,
+            color: isIncome ? AppTheme.secondaryColor : AppTheme.onSurfaceColor,
           ),
         ),
         Text(

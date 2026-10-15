@@ -5,6 +5,7 @@ class CategoryModel {
   final String iconName;
   final String colorHex;
   final bool isCustom;
+  final String type;
 
   const CategoryModel({
     required this.id,
@@ -13,6 +14,7 @@ class CategoryModel {
     required this.iconName,
     required this.colorHex,
     required this.isCustom,
+    required this.type,
   });
 
   factory CategoryModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class CategoryModel {
       iconName: json['icon_name'] as String,
       colorHex: json['color_hex'] as String,
       isCustom: json['is_custom'] as bool,
+      type: json['type'] as String? ?? 'expense',
     );
   }
 
@@ -34,6 +37,7 @@ class CategoryModel {
       'icon_name': iconName,
       'color_hex': colorHex,
       'is_custom': isCustom,
+      'type': type,
     };
   }
 }

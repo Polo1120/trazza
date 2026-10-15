@@ -11,9 +11,13 @@ class ExpenseRepository {
   }
 
   Future<List<ExpenseModel>> getExpenses() async {
+    final user = client.auth.currentUser;
+    if (user == null) return [];
+
     final rows = await client
         .from('expenses')
         .select()
+        .eq('user_id', user.id)
         .order('expense_date', ascending: false);
 
     return rows.map(ExpenseModel.fromJson).toList();

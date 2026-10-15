@@ -10,3 +10,13 @@ final categoryRepositoryProvider = Provider<CategoryRepository>((ref) {
 final categoriesProvider = FutureProvider<List<CategoryModel>>((ref) {
   return ref.watch(categoryRepositoryProvider).getCategories();
 });
+
+final categoriesByTypeProvider =
+    Provider.family<AsyncValue<List<CategoryModel>>, String>((ref, type) {
+      return ref
+          .watch(categoriesProvider)
+          .whenData(
+            (categories) =>
+                categories.where((category) => category.type == type).toList(),
+          );
+    });

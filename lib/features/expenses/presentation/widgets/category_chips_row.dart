@@ -92,29 +92,60 @@ class _CategoryChip extends StatelessWidget {
     return Color(int.tryParse(normalized, radix: 16) ?? 0xFF6750A4);
   }
 
-  IconData get _categoryIcon {
+  String get _categoryEmoji {
+    final categoryValue = '${category.name} ${category.iconName}'.toLowerCase();
+    if (categoryValue.contains('salario') || categoryValue.contains('sueldo')) {
+      return '💼';
+    }
+    if (categoryValue.contains('freelance')) {
+      return '💻';
+    }
+    if (categoryValue.contains('invers')) {
+      return '📈';
+    }
+    if (categoryValue.contains('venta')) {
+      return '🏷️';
+    }
+    if (categoryValue.contains('reembolso') ||
+        categoryValue.contains('devolu')) {
+      return '🎁';
+    }
+    if (categoryValue.contains('comida') ||
+        categoryValue.contains('food') ||
+        categoryValue.contains('restaurant')) {
+      return '🍔';
+    }
+    if (categoryValue.contains('vivienda') ||
+        categoryValue.contains('home') ||
+        categoryValue.contains('house')) {
+      return '🏠';
+    }
+    if (categoryValue.contains('transporte') ||
+        categoryValue.contains('transport') ||
+        categoryValue.contains('bus')) {
+      return '🚗';
+    }
+    if (categoryValue.contains('ocio') ||
+        categoryValue.contains('entretenimiento') ||
+        categoryValue.contains('entertainment')) {
+      return '🎉';
+    }
+    if (categoryValue.contains('mercado') ||
+        categoryValue.contains('groceries') ||
+        categoryValue.contains('market')) {
+      return '🛒';
+    }
     switch (category.iconName.toLowerCase()) {
       case 'coffee':
-        return Icons.coffee_rounded;
-      case 'restaurant':
-      case 'food':
-      case 'lunch':
-        return Icons.restaurant_rounded;
-      case 'transport':
-      case 'bus':
-        return Icons.directions_bus_rounded;
-      case 'groceries':
-      case 'shopping_cart':
-      case 'market':
-        return Icons.shopping_cart_rounded;
+        return '☕';
       case 'pharmacy':
       case 'health':
-        return Icons.local_pharmacy_rounded;
+        return '💊';
       case 'services':
       case 'bolt':
-        return Icons.bolt_rounded;
+        return '⚡';
       default:
-        return Icons.category_rounded;
+        return '📌';
     }
   }
 
@@ -139,7 +170,7 @@ class _CategoryChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(_categoryIcon, size: 16, color: categoryColor),
+              Text(_categoryEmoji, style: const TextStyle(fontSize: 14)),
               const SizedBox(width: 6),
               Text(
                 category.name,

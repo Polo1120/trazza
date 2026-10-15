@@ -11,6 +11,7 @@ class ExpenseItem {
   final Color iconColor;
   final Color iconBackgroundColor;
   final bool hasOcrReceipt;
+  final bool isIncome;
 
   const ExpenseItem({
     required this.id,
@@ -23,6 +24,7 @@ class ExpenseItem {
     required this.iconColor,
     required this.iconBackgroundColor,
     this.hasOcrReceipt = false,
+    this.isIncome = false,
   });
 }
 

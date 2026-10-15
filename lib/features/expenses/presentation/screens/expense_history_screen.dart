@@ -1,99 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:trazza/core/theme/app_theme.dart';
+import 'package:trazza/features/expenses/domain/models/expense_model.dart';
 import 'package:trazza/features/expenses/presentation/widgets/expense_date_group.dart';
 import 'package:trazza/features/expenses/presentation/widgets/expense_history_models.dart';
 import 'package:trazza/features/expenses/presentation/widgets/history_filter_chips.dart';
 import 'package:trazza/features/expenses/presentation/widgets/history_search_bar.dart';
+import 'package:trazza/features/expenses/providers/expense_provider.dart';
 
-final _sampleExpenseGroups = [
-  ExpenseGroup(
-    dateLabel: 'Hoy, 1 Octubre',
-    formattedTotal: '\$21.200 COP',
-    isToday: true,
-    items: [
-      ExpenseItem(
-        id: 'exp_001',
-        title: 'Almuerzo Corrientazo',
-        subtitle: 'Rest. Doña Luz',
-        time: '12:45 PM',
-        paymentMethod: 'Nequi',
-        amountCents: 1800000,
-        icon: Icons.lunch_dining_rounded,
-        iconColor: AppTheme.onSecondaryContainer,
-        iconBackgroundColor: AppTheme.secondaryContainer.withValues(alpha: 0.4),
-      ),
-      ExpenseItem(
-        id: 'exp_002',
-        title: 'Pasaje Bus SITP',
-        subtitle: 'Tarjeta TuLlave',
-        time: '07:30 AM',
-        paymentMethod: 'Efectivo',
-        amountCents: 320000,
-        icon: Icons.directions_bus_rounded,
-        iconColor: AppTheme.primaryColor,
-        iconBackgroundColor: AppTheme.primaryFixedDim.withValues(alpha: 0.3),
-      ),
-    ],
-  ),
-  ExpenseGroup(
-    dateLabel: 'Ayer, 30 Septiembre',
-    formattedTotal: '\$1.214.800 COP',
-    items: [
-      ExpenseItem(
-        id: 'exp_003',
-        title: 'Pago Arriendo Apto 402',
-        subtitle: 'Transf.',
-        time: '',
-        paymentMethod: 'Bancolombia',
-        amountCents: 120000000,
-        icon: Icons.real_estate_agent_rounded,
-        iconColor: AppTheme.tertiaryColor,
-        iconBackgroundColor: const Color(0xFFFFDAD7).withValues(alpha: 0.5),
-      ),
-      ExpenseItem(
-        id: 'exp_004',
-        title: 'Juan Valdez Café Torres Unidas',
-        subtitle: 'Capuccino + Croissant',
-        time: '04:15 PM',
-        paymentMethod: 'Nequi',
-        amountCents: 1480000,
-        icon: Icons.local_cafe_rounded,
-        iconColor: AppTheme.secondaryColor,
-        iconBackgroundColor: AppTheme.secondaryContainer.withValues(alpha: 0.3),
-      ),
-    ],
-  ),
-  ExpenseGroup(
-    dateLabel: '28 Septiembre',
-    formattedTotal: '\$89.500 COP',
-    items: [
-      ExpenseItem(
-        id: 'exp_005',
-        title: 'Éxito Express Chapinero',
-        subtitle: 'Canasta básica',
-        time: '',
-        paymentMethod: 'Tarjeta Débito',
-        amountCents: 8950000,
-        icon: Icons.shopping_cart_rounded,
-        iconColor: AppTheme.onSecondaryContainer,
-        iconBackgroundColor: AppTheme.secondaryFixed.withValues(alpha: 0.4),
-        hasOcrReceipt: true,
-      ),
-    ],
-  ),
-];
-
-class ExpenseHistoryScreen extends StatefulWidget {
+class ExpenseHistoryScreen extends ConsumerWidget {
   const ExpenseHistoryScreen({super.key});
 
   @override
-  State<ExpenseHistoryScreen> createState() => _ExpenseHistoryScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      backgroundColor: AppTheme.surfaceColor,
+      body: SafeArea(
+        bottom: false,
+        child: ref.watch(expensesProvider).when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stackTrace) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'No pudimos cargar tus gastos. Intenta de nuevo más tarde.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(color: AppTheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+          data: (expenses) => _HistoryContent(expenses: expenses),
+        ),
+      ),
+    );
+  }
 }
 
-class _ExpenseHistoryScreenState extends State<ExpenseHistoryScreen> {
+class _HistoryContent extends StatefulWidget {
+  final List<ExpenseModel> expenses;
+
+  const _HistoryContent({required this.expenses});
+
+  @override
+  State<_HistoryContent> createState() => _HistoryContentState();
+}
+
+class _HistoryContentState extends State<_HistoryContent> {
   final TextEditingController searchController = TextEditingController();
   ExpenseFilter selectedFilter = ExpenseFilter.all;
   String searchQuery = '';
@@ -105,66 +61,79 @@ class _ExpenseHistoryScreenState extends State<ExpenseHistoryScreen> {
     super.dispose();
   }
 
-  List<ExpenseGroup> get filteredGroups {
-    if (searchQuery.isEmpty && selectedFilter == ExpenseFilter.all) {
-      return _sampleExpenseGroups;
+  List<ExpenseModel> get filteredExpenses {
+    final now = DateTime.now();
+    final startOfWeek = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+    return widget.expenses.where((expense) {
+      final searchableText = '${expense.description ?? ''} ${expense.categoryId ?? ''} ${expense.paymentMethod ?? ''} ${expense.amount}'.toLowerCase();
+      final matchesSearch = searchableText.contains(searchQuery);
+      final matchesFilter = switch (selectedFilter) {
+        ExpenseFilter.all => true,
+        ExpenseFilter.thisWeek => !expense.expenseDate.isBefore(startOfWeek),
+        ExpenseFilter.categories => expense.categoryId != null,
+        ExpenseFilter.paymentMethods => expense.paymentMethod?.isNotEmpty ?? false,
+        ExpenseFilter.highAmount => expense.amount > 50000,
+      };
+      return matchesSearch && matchesFilter;
+    }).toList();
+  }
+
+  List<ExpenseGroup> groupExpensesByDate(List<ExpenseModel> expenses) {
+    final groupedExpenses = <DateTime, List<ExpenseModel>>{};
+    for (final expense in expenses) {
+      final date = expense.expenseDate.toLocal();
+      final dateKey = DateTime(date.year, date.month, date.day);
+      groupedExpenses.putIfAbsent(dateKey, () => []).add(expense);
     }
-
-    return _sampleExpenseGroups
-        .map((group) {
-          final matchedItems = group.items.where((item) {
-            final matchesSearch = searchQuery.isEmpty ||
-                item.title.toLowerCase().contains(searchQuery) ||
-                item.subtitle.toLowerCase().contains(searchQuery) ||
-                item.paymentMethod.toLowerCase().contains(searchQuery);
-
-            final matchesFilter = _itemMatchesFilter(item);
-
-            return matchesSearch && matchesFilter;
-          }).toList();
-
-          return matchedItems.isEmpty
-              ? null
-              : ExpenseGroup(
-                  dateLabel: group.dateLabel,
-                  formattedTotal: group.formattedTotal,
-                  isToday: group.isToday,
-                  items: matchedItems,
-                );
-        })
-        .whereType<ExpenseGroup>()
-        .toList();
+    final today = DateTime.now();
+    final todayKey = DateTime(today.year, today.month, today.day);
+    final yesterdayKey = todayKey.subtract(const Duration(days: 1));
+    final sortedDates = groupedExpenses.keys.toList()..sort((a, b) => b.compareTo(a));
+    return sortedDates.map((date) {
+      final isToday = date == todayKey;
+      final isYesterday = date == yesterdayKey;
+      final dateLabel = isToday
+          ? 'Hoy, ${_formatDate(date)}'
+          : isYesterday
+              ? 'Ayer, ${_formatDate(date)}'
+              : _formatDate(date);
+      final items = groupedExpenses[date]!.map(_toExpenseItem).toList();
+      final total = groupedExpenses[date]!.fold<double>(0, (sum, expense) => sum + expense.amount);
+      return ExpenseGroup(
+        dateLabel: dateLabel,
+        formattedTotal: NumberFormat.currency(locale: 'es_CO', symbol: r'$ ', decimalDigits: 0).format(total),
+        isToday: isToday,
+        items: items,
+      );
+    }).toList();
   }
 
-  bool _itemMatchesFilter(ExpenseItem item) {
-    switch (selectedFilter) {
-      case ExpenseFilter.all:
-        return true;
-      case ExpenseFilter.thisWeek:
-        return item.id == 'exp_001' || item.id == 'exp_002';
-      case ExpenseFilter.categories:
-        return true;
-      case ExpenseFilter.paymentMethods:
-        return true;
-      case ExpenseFilter.highAmount:
-        return item.amountCents >= 5000000;
-    }
+  String _formatDate(DateTime date) {
+    const monthNames = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    ];
+    return '${date.day} ${monthNames[date.month - 1]}';
   }
 
-  int get totalVisibleCount =>
-      filteredGroups.fold(0, (sum, g) => sum + g.items.length);
-
-  void _onSearchChanged(String value) {
-    setState(() => searchQuery = value.toLowerCase().trim());
-  }
-
-  void _onClearSearch() {
-    searchController.clear();
-    setState(() => searchQuery = '');
-  }
-
-  void _onFilterSelected(ExpenseFilter filter) {
-    setState(() => selectedFilter = filter);
+  ExpenseItem _toExpenseItem(ExpenseModel expense) {
+    final expenseDate = expense.expenseDate.toLocal();
+    return ExpenseItem(
+      id: expense.id ?? '${expense.userId}_${expense.expenseDate.toIso8601String()}',
+      title: (expense.description?.trim().isNotEmpty ?? false)
+          ? expense.description!.trim()
+          : 'Gasto',
+      subtitle: expense.categoryId ?? '',
+      time: DateFormat('hh:mm a').format(expenseDate),
+      paymentMethod: expense.paymentMethod ?? '',
+      amountCents: (expense.amount * 100).round(),
+      icon: Icons.receipt_long_rounded,
+      iconColor: AppTheme.primaryColor,
+      iconBackgroundColor: AppTheme.primaryFixedDim.withValues(alpha: 0.3),
+      hasOcrReceipt: expense.receiptImageUrl != null,
+      isIncome: expense.transactionType == 'income',
+    );
   }
 
   void _onExportPressed() {
@@ -177,70 +146,59 @@ class _ExpenseHistoryScreenState extends State<ExpenseHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groups = filteredGroups;
-    final totalCount = _sampleExpenseGroups.fold(
-      0,
-      (sum, g) => sum + g.items.length,
-    );
-
-    return Scaffold(
-      backgroundColor: AppTheme.surfaceColor,
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                _HistoryAppBar(totalCount: totalCount),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                  sliver: SliverToBoxAdapter(
-                    child: HistorySearchBar(
-                      searchController: searchController,
-                      onChanged: _onSearchChanged,
-                      onClear: _onClearSearch,
-                      onScanPressed: () {
-                        context.push('/scan-receipt');
-                      },
-                    ),
-                  ),
+    final groups = groupExpensesByDate(filteredExpenses);
+    final totalCount = widget.expenses.length;
+    return Stack(
+      children: [
+        CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            _HistoryAppBar(totalCount: totalCount),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              sliver: SliverToBoxAdapter(
+                child: HistorySearchBar(
+                  searchController: searchController,
+                  onChanged: (value) => setState(() => searchQuery = value.toLowerCase().trim()),
+                  onClear: () {
+                    searchController.clear();
+                    setState(() => searchQuery = '');
+                  },
+                  onScanPressed: () => context.push('/scan-receipt'),
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  sliver: SliverToBoxAdapter(
-                    child: HistoryFilterChips(
-                      selectedFilter: selectedFilter,
-                      onFilterSelected: _onFilterSelected,
-                      totalCount: totalCount,
-                    ),
-                  ),
-                ),
-                if (groups.isEmpty)
-                  const SliverFillRemaining(child: _EmptyState())
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    sliver: SliverList.separated(
-                      itemCount: groups.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 20),
-                      itemBuilder: (context, index) {
-                        return ExpenseDateGroup(group: groups[index]);
-                      },
-                    ),
-                  ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-                  sliver: SliverToBoxAdapter(
-                    child: _ExportSection(onExport: _onExportPressed),
-                  ),
-                ),
-              ],
+              ),
             ),
-            _ExportToast(visible: showExportToast),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              sliver: SliverToBoxAdapter(
+                child: HistoryFilterChips(
+                  selectedFilter: selectedFilter,
+                  onFilterSelected: (filter) => setState(() => selectedFilter = filter),
+                  totalCount: totalCount,
+                ),
+              ),
+            ),
+            if (groups.isEmpty)
+              SliverFillRemaining(
+                child: _EmptyState(isFiltered: searchQuery.isNotEmpty || selectedFilter != ExpenseFilter.all),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                sliver: SliverList.separated(
+                  itemCount: groups.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 20),
+                  itemBuilder: (context, index) => ExpenseDateGroup(group: groups[index]),
+                ),
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+              sliver: SliverToBoxAdapter(child: _ExportSection(onExport: _onExportPressed)),
+            ),
           ],
         ),
-      ),
+        _ExportToast(visible: showExportToast),
+      ],
     );
   }
 }
@@ -274,59 +232,20 @@ class _HistoryAppBar extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Historial de Movimientos',
-                    style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.onSurfaceColor,
-                      height: 1.2,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    'Revisa y filtra tus transacciones en Colombia',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: AppTheme.onSurfaceVariant,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text('Historial de Movimientos', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.onSurfaceColor, height: 1.2), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text('Revisa y filtra tus transacciones en Colombia', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w400, color: AppTheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: AppTheme.secondaryColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Oct 2024 · $totalCount movs',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.onSurfaceColor,
-                    ),
-                  ),
-                ],
-              ),
+              decoration: BoxDecoration(color: AppTheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(999)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.secondaryColor, shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                Text('$totalCount gastos', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.onSurfaceColor)),
+              ]),
             ),
           ],
         ),
@@ -344,105 +263,55 @@ class _ExportSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Material(
-          color: AppTheme.surfaceContainerHigh,
+    return Column(children: [
+      Material(
+        color: AppTheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onExport,
           borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            onTap: onExport,
-            borderRadius: BorderRadius.circular(14),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.download_rounded,
-                    size: 20,
-                    color: AppTheme.primaryColor,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Descargar Extracto (PDF / Excel)',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.onSurfaceColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.download_rounded, size: 20, color: AppTheme.primaryColor),
+              const SizedBox(width: 8),
+              Text('Descargar Extracto (PDF / Excel)', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.onSurfaceColor)),
+            ]),
           ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.verified_user_rounded,
-              size: 16,
-              color: AppTheme.secondaryColor,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Datos encriptados bajo estándares financieros de Colombia',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
+      ),
+      const SizedBox(height: 12),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.verified_user_rounded, size: 16, color: AppTheme.secondaryColor),
+        const SizedBox(width: 6),
+        Text('Tus gastos, siempre a la mano', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.onSurfaceVariant)),
+      ]),
+    ]);
   }
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final bool isFiltered;
+
+  const _EmptyState({required this.isFiltered});
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.receipt_long_rounded,
-              size: 32,
-              color: AppTheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Sin resultados',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.onSurfaceColor,
-            ),
-          ),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(color: AppTheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(20)),
+          child: const Icon(Icons.receipt_long_rounded, size: 32, color: AppTheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
+        Text(isFiltered ? 'Sin resultados' : 'No hay gastos registrados', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.onSurfaceColor)),
+        if (isFiltered) ...[
           const SizedBox(height: 4),
-          Text(
-            'Intenta con otra búsqueda o filtro',
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              color: AppTheme.onSurfaceVariant,
-            ),
-          ),
+          Text('Intenta con otra búsqueda o filtro', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w400, color: AppTheme.onSurfaceVariant)),
         ],
-      ),
+      ]),
     );
   }
 }
@@ -459,41 +328,17 @@ class _ExportToast extends StatelessWidget {
       left: 0,
       right: 0,
       child: AnimatedOpacity(
-        opacity: visible ? 1.0 : 0.0,
+        opacity: visible ? 1 : 0,
         duration: const Duration(milliseconds: 300),
         child: Center(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF293040),
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.check_circle_rounded,
-                  size: 18,
-                  color: AppTheme.secondaryFixed,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Generando extracto de Octubre...',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFFEDF0FF),
-                  ),
-                ),
-              ],
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF293040), borderRadius: BorderRadius.circular(999), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 16, offset: const Offset(0, 4))]),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.secondaryFixed),
+              const SizedBox(width: 10),
+              Text('Preparando tu extracto...', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFEDF0FF))),
+            ]),
           ),
         ),
       ),

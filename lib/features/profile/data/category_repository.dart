@@ -7,7 +7,14 @@ class CategoryRepository {
   const CategoryRepository(this.client);
 
   Future<List<CategoryModel>> getCategories() async {
-    final rows = await client.from('categories').select().order('name');
+    final user = client.auth.currentUser;
+    if (user == null) return [];
+
+    final rows = await client
+        .from('categories')
+        .select()
+        .eq('user_id', user.id)
+        .order('name');
     return rows.map(CategoryModel.fromJson).toList();
   }
 }
